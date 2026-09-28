@@ -1,5 +1,6 @@
 # AI Log Analyzer
-n[![CI](https://github.com/Lokesh-290104/ai-log-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/Lokesh-290104/ai-log-analyzer/actions/workflows/ci.yml)
+
+[![CI](https://github.com/Lokesh-290104/ai-log-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/Lokesh-290104/ai-log-analyzer/actions/workflows/ci.yml)
 
 Ask plain-English questions about a log file. An LLM agent answers by **calling tools**:
 deterministic Python computes every count, time and percentage, and code checks the final
