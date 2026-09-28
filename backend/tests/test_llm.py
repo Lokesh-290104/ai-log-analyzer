@@ -154,7 +154,7 @@ def test_chain_raises_last_error_when_all_fail():
     from app.llm import ChainClient
 
     chain = ChainClient([Scripted(["g"], {"g": [ProviderError(401)]}), Scripted(["o"], {"o": [ProviderError(402)]})])
-    with pytest.raises(LLMError, match="out of credits"):
+    with pytest.raises(LLMError, match="API key was rejected; the Test account is out of credits"):
         generate(chain)
 
 

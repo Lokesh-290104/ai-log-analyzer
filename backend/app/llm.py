@@ -232,7 +232,11 @@ class ChainClient:
                 continue
             self._active = client
             return text
-        raise LLMError(errors[-1] if errors else "The AI service took too long to respond. Please try again later.")
+        if not errors:
+            raise LLMError("The AI service took too long to respond. Please try again later.")
+        # Every provider failed: say why for each, so a bad key isn't hidden behind a later quota error.
+        reasons = [e.split(" because ", 1)[-1].removesuffix(" Please try again later.").rstrip(".") for e in errors]
+        raise LLMError(f"The AI service couldn't answer because {'; '.join(reasons)}. Please try again later.")
 
 
 _PROVIDERS = {"gemini": GeminiClient, "openrouter": OpenRouterClient}
