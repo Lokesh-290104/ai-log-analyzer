@@ -64,3 +64,6 @@ jobs:
           for i in $(seq 1 30); do curl -sf localhost:8000/api/health && break; sleep 1; done
           curl -sf localhost:8000/ | grep -q "AI Log Analyzer"
           curl -sf -X POST localhost:8000/api/uploads/sample | grep -q '"parsed_entries"'
+      - name: Container logs
+        if: failure()
+        run: docker logs app

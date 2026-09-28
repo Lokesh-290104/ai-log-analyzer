@@ -13,10 +13,14 @@ FROM python:3.14-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    STATIC_DIR=/app/static
+    STATIC_DIR=/app/static \
+    DATABASE_URL=sqlite+aiosqlite:////app/data/local.db
+# DATABASE_URL above is only a fallback: the host's DATABASE_URL (Render Postgres) overrides it.
 WORKDIR /app
 COPY backend/requirements.txt .
-RUN pip install -r requirements.txt && useradd --system --no-create-home app
+RUN pip install -r requirements.txt \
+    && useradd --system --no-create-home app \
+    && mkdir -p /app/data && chown app /app/data
 COPY backend/app app
 COPY --from=web /web/dist static
 USER app
