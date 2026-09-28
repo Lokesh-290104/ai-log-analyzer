@@ -1,0 +1,37 @@
+# Render Blueprint: New > Blueprint > pick this repo. Render asks for the secret values below.
+databases:
+  - name: ai-log-analyzer-db
+    plan: free
+    databaseName: log_analyzer
+    user: log_analyzer
+
+services:
+  - type: web
+    name: ai-log-analyzer
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-log-analyzer-db
+          property: connectionString
+      # Gemini first; OpenRouter answers when Gemini is out of quota.
+      - key: LLM_PROVIDER
+        value: gemini,openrouter
+      - key: GEMINI_API_KEY
+        sync: false          # secret: entered in the Render dashboard, never committed
+      - key: GEMINI_MODEL
+        value: gemma-4-26b-a4b-it
+      - key: OPENROUTER_API_KEY
+        sync: false          # optional
+      # Public demo: cap LLM spend. Render's proxy appends the real client IP.
+      - key: TRUST_PROXY
+        value: "true"
+      - key: ASK_LIMIT_PER_MINUTE
+        value: "4"
+      - key: ASK_LIMIT_PER_DAY
+        value: "200"
+      - key: UPLOAD_LIMIT_PER_DAY
+        value: "300"

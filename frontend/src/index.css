@@ -126,6 +126,13 @@ h3 {
   font-size: 13px;
 }
 
+code,
+pre,
+textarea,
+.top-errors .sig {
+  font-variant-ligatures: none;
+}
+
 code {
   font-family: var(--mono);
   font-size: 0.9em;
