@@ -12,6 +12,7 @@ in log text (e.g. "retry 3 of 5") counts as evidence when that entry is cited.
 """
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -96,7 +97,8 @@ def _number_supported(token: str, allowed: set[float]) -> bool:
     # "75"); integer counts must match exactly, so "about 140" for 143 is rejected.
     decimals = len(token.partition(".")[2])
     step = 10.0**-decimals
-    return any(y != int(y) and abs(value - y) < step for y in allowed)
+    # is_integer() rather than int(y): a 400-digit number in a log line parses to inf.
+    return any(not y.is_integer() and abs(value - y) < step for y in allowed if math.isfinite(y))
 
 
 @dataclass

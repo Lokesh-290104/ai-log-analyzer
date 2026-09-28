@@ -125,7 +125,7 @@ Design choices worth calling out:
 ## Tests and eval
 
 ```bash
-cd backend && python -m pytest          # 157 tests, offline: FakeLLM + SQLite
+cd backend && python -m pytest          # 162 tests, offline: FakeLLM + SQLite
 cd frontend && npm test                 # Vitest + Testing Library
 ```
 

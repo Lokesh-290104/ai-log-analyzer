@@ -106,3 +106,9 @@ def test_times_and_timestamp_parts_not_in_evidence_fail(answer, bad):
 
 def test_times_in_the_question_are_allowed():
     assert judge_answer("Nothing between 9:00 and 9:30.", [], {}, "what happened 09:00 to 09:30?").ok
+
+
+def test_huge_numbers_in_evidence_do_not_crash():
+    results = {1: {"entry": {"message": "id " + "9" * 400}, "count": 3}}
+    assert judge_answer("There were 3.", [1], results, "q").ok
+    assert not judge_answer("There were 4.", [1], results, "q").ok

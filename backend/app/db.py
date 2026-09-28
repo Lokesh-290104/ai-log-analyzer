@@ -101,20 +101,25 @@ async def load_entries(session: AsyncSession, upload_id: str) -> list[LogEntry]:
     result = await session.execute(
         select(LogEntryRow).where(LogEntryRow.upload_id == upload_id).order_by(LogEntryRow.line_no)
     )
-    return [
+    entries = [
         # SQLite drops the timezone on the way back; every stored time is UTC.
         LogEntry(r.line_no, r.ts if r.ts.tzinfo else r.ts.replace(tzinfo=UTC), r.level, r.service, r.message,
                  r.detail or "")
         for r in result.scalars()
     ]
+    entries.sort(key=lambda e: (e.ts, e.line_no))  # same order parse_logs produces
+    return entries
 
 
 class EntryCache:
-    """Small LRU of parsed entries per upload. The database stays the source of truth."""
+    """LRU of parsed entries per upload, bounded by the TOTAL number of entries so a few
+    100k-line uploads can't exhaust a small instance's memory. The database stays the
+    source of truth; an evicted upload is reloaded on its next question."""
 
-    def __init__(self, size: int):
-        self.size = size
+    def __init__(self, max_entries: int):
+        self.max_entries = max_entries
         self._items: OrderedDict[str, list[LogEntry]] = OrderedDict()
+        self._total = 0
 
     def get(self, upload_id: str) -> list[LogEntry] | None:
         entries = self._items.get(upload_id)
@@ -123,9 +128,12 @@ class EntryCache:
         return entries
 
     def put(self, upload_id: str, entries: list[LogEntry]) -> None:
-        if self.size <= 0:
+        if len(entries) > self.max_entries:
             return
+        if upload_id in self._items:
+            self._total -= len(self._items.pop(upload_id))
         self._items[upload_id] = entries
-        self._items.move_to_end(upload_id)
-        while len(self._items) > self.size:
-            self._items.popitem(last=False)
+        self._total += len(entries)
+        while self._total > self.max_entries:
+            _, evicted = self._items.popitem(last=False)
+            self._total -= len(evicted)

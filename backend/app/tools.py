@@ -269,12 +269,32 @@ def search(entries: list[LogEntry], args: SearchArgs) -> dict:
     }
 
 
-def _auto_bucket(span: timedelta) -> int:
+MAX_BUCKETS = 200
+_BUCKET_LADDER = (1, 5, 15, 60, 360, 1440, 10080)
+
+
+def _bucket_size(span: timedelta, requested: int | None) -> int:
+    """Requested size, or one giving ~60 buckets; widened so there are never more than
+    MAX_BUCKETS (a log spanning years must not allocate millions of buckets)."""
     minutes = span.total_seconds() / 60
-    for size in (1, 5, 15, 60):
-        if minutes / size <= 60:
+    if requested is None:
+        requested = next((s for s in _BUCKET_LADDER[:4] if minutes / s <= 60), 60)
+    if minutes / requested < MAX_BUCKETS:
+        return requested
+    for size in _BUCKET_LADDER:
+        if size >= requested and minutes / size < MAX_BUCKETS:
             return size
-    return 60
+    return 1440 * (int(minutes / 1440 / MAX_BUCKETS) + 1)  # whole days
+
+
+def _align(ts: datetime, size: int) -> datetime:
+    ts = ts.replace(second=0, microsecond=0)
+    if size < 60:
+        return ts - timedelta(minutes=ts.minute % size)
+    ts = ts.replace(minute=0)
+    if size < 1440:
+        return ts - timedelta(hours=ts.hour % (size // 60))
+    return ts.replace(hour=0)
 
 
 def timeline(entries: list[LogEntry], args: TimelineArgs) -> dict:
@@ -282,10 +302,9 @@ def timeline(entries: list[LogEntry], args: TimelineArgs) -> dict:
     if not selected:
         return {"filters": _filters_echo(args), "total_matching": 0, "bucket_minutes": args.bucket_minutes,
                 "buckets": [], "peak": None}
-    size = args.bucket_minutes or _auto_bucket(selected[-1].ts - selected[0].ts)
+    size = _bucket_size(selected[-1].ts - selected[0].ts, args.bucket_minutes)
     step = timedelta(minutes=size)
-    origin = selected[0].ts.replace(second=0, microsecond=0)
-    origin -= timedelta(minutes=origin.minute % size)
+    origin = _align(selected[0].ts, size)
     counts: Counter[int] = Counter()
     errors: Counter[int] = Counter()
     for e in selected:
@@ -298,9 +317,6 @@ def timeline(entries: list[LogEntry], args: TimelineArgs) -> dict:
         {"start": iso(origin + i * step), "count": counts[i], "errors": errors[i]}
         for i in range(last + 1)
     ]
-    # Too many buckets for the prompt: keep the busiest ones (the peak is always kept).
-    if len(buckets) > 200:
-        buckets = sorted(sorted(buckets, key=lambda b: -b["count"])[:200], key=lambda b: b["start"])
     peak = max(buckets, key=lambda b: b["count"])  # earliest bucket wins a tie
     return {
         "filters": _filters_echo(args),

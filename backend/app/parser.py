@@ -237,4 +237,7 @@ def parse_logs(text: str, max_lines: int = 100_000) -> ParseResult:
         LogEntry(line_no, ts, level, service, message, "\n".join(detail)[:MAX_DETAIL_LEN])
         for line_no, ts, level, service, message, detail in pending
     ]
+    # Time order, not file order: merged logs are often out of order, and every tool
+    # ("first", time windows, timelines) is defined on time. Line numbers are kept.
+    entries.sort(key=lambda e: (e.ts, e.line_no))
     return ParseResult(entries, len(lines), blank, continuation, unparsed, samples)

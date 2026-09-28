@@ -141,3 +141,36 @@ def test_sample_incident_numbers():
     assert by_service[0]["value"] == "payments"
     peak = run(entries, "timeline", level=["ERROR", "FATAL"], bucket_minutes=5)["peak"]
     assert peak["start"].startswith("2026-09-28T10:4") or peak["start"].startswith("2026-09-28T10:5")
+
+
+OUT_OF_ORDER = (
+    "2026-09-28T10:05:00Z ERROR [a] late line first in the file\n"
+    "2026-09-28T10:00:00Z ERROR [a] earliest\n"
+    "2026-09-28T10:02:00Z INFO [a] middle\n"
+)
+
+
+def test_out_of_order_logs_are_analyzed_in_time_order():
+    entries = parse_logs(OUT_OF_ORDER).entries
+    assert [e.line_no for e in entries] == [2, 3, 1]
+    s = run(entries, "summary")
+    assert (s["first_ts"], s["last_ts"]) == ("2026-09-28T10:00:00Z", "2026-09-28T10:05:00Z")
+    assert run(entries, "find_occurrence", level="ERROR")["entry"]["line"] == 2
+    t = run(entries, "timeline", bucket_minutes=1)
+    assert sum(b["count"] for b in t["buckets"]) == 3  # nothing dropped
+
+
+def test_timeline_widens_buckets_for_huge_spans():
+    entries = parse_logs(
+        "0001-01-01T00:00:00Z ERROR [a] ancient\n9999-12-31T23:59:00Z ERROR [a] far future\n"
+    ).entries
+    t = run(entries, "timeline", bucket_minutes=1)
+    assert len(t["buckets"]) <= 200 and t["bucket_minutes"] > 10080
+    assert sum(b["count"] for b in t["buckets"]) == 2
+
+
+def test_timeline_widens_a_requested_size_that_would_be_too_fine():
+    entries = parse_logs("2026-09-01T00:00:00Z INFO [a] x\n2026-09-28T00:00:00Z INFO [a] y\n").entries
+    t = run(entries, "timeline", bucket_minutes=1)
+    assert t["bucket_minutes"] == 360 and len(t["buckets"]) <= 200
+    assert t["buckets"][0]["start"] == "2026-09-01T00:00:00Z"

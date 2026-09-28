@@ -71,8 +71,8 @@ class Settings:
     # Upload limits: protect the free-tier instance's memory and the database.
     max_upload_bytes: int = field(default_factory=lambda: _int("MAX_UPLOAD_BYTES", 5_000_000, 1000))
     max_upload_lines: int = field(default_factory=lambda: _int("MAX_UPLOAD_LINES", 100_000, 10))
-    # Parsed uploads kept in memory so questions don't reload every row from the database.
-    entry_cache_size: int = field(default_factory=lambda: _int("ENTRY_CACHE_SIZE", 8, 0))
+    # Parsed entries kept in memory (across uploads) so questions don't reload every row.
+    entry_cache_entries: int = field(default_factory=lambda: _int("ENTRY_CACHE_ENTRIES", 200_000, 0))
 
     # Limits on /ask (spends LLM quota) and on uploads (spends storage). 0 disables a limit.
     ask_limit_per_minute: int = field(default_factory=lambda: _int("ASK_LIMIT_PER_MINUTE", 6, 0))

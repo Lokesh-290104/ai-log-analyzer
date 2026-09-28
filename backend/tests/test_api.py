@@ -160,7 +160,7 @@ def test_trust_proxy_uses_last_forwarded_address(make_client):
 
 
 def test_entries_reload_from_database_when_not_cached(make_client):
-    client, _ = make_client([tool_call("summary"), final("6 entries.", [1])], entry_cache_size=0)
+    client, _ = make_client([tool_call("summary"), final("6 entries.", [1])], entry_cache_entries=0)
     upload_id = upload(client).json()["id"]
     body = client.post(f"/api/uploads/{upload_id}/ask", json={"question": "how many?"}).json()
     assert body["status"] == "answered"
@@ -192,3 +192,19 @@ def test_sample_log_end_to_end_numbers(make_client):
     assert body["status"] == "answered"
     assert body["trace"][0]["result"]["rows"][0]["services"] == ["payments"]
     assert len(generate_sample_logs()) < 1_000_000
+
+
+def test_entry_cache_is_bounded_by_total_entries():
+    from app.db import EntryCache
+    from app.parser import parse_logs
+
+    entries = parse_logs(SMALL_LOG).entries  # 6 entries
+    cache = EntryCache(max_entries=10)
+    cache.put("a", entries)
+    cache.put("b", entries)  # 12 > 10: evicts "a"
+    assert cache.get("a") is None and cache.get("b") is entries
+    cache.put("b", entries)  # re-put doesn't double count
+    cache.put("c", entries[:4])
+    assert cache.get("b") is entries and cache.get("c") is not None
+    cache.put("huge", entries * 2)  # larger than the whole budget: not cached
+    assert cache.get("huge") is None and cache.get("b") is entries

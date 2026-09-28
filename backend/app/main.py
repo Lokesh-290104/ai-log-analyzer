@@ -103,7 +103,7 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
     app = FastAPI(title="AI Log Analyzer", version="1.0.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.llm = llm
-    app.state.cache = EntryCache(settings.entry_cache_size)
+    app.state.cache = EntryCache(settings.entry_cache_entries)
     app.state.ask_limiter = RateLimiter(settings.ask_limit_per_minute, settings.ask_limit_per_day, noun="question")
     app.state.upload_limiter = RateLimiter(
         settings.upload_limit_per_minute, settings.upload_limit_per_day, noun="upload"
