@@ -62,7 +62,7 @@ def test_network_error_skips_to_next_model():
 def test_all_models_fail_with_clear_message(code, phrase):
     client = Scripted(["a"], {"a": [ProviderError(code)]})
     with pytest.raises(LLMError, match=phrase):
-        generate(client)
+        asyncio.run(client.generate("sys", MSG, 30, quota_wait=False))
 
 
 def test_deadline_exhausted():
@@ -117,3 +117,53 @@ def test_rate_limiter_minute_and_day_windows():
     assert "limit for today" in limiter.check("b")
     now[0] = 86_400 + 1
     assert limiter.check("b") is None
+
+
+def test_quota_on_every_model_waits_then_retries(monkeypatch):
+    real_sleep = asyncio.sleep
+    waits = []
+    monkeypatch.setattr("app.llm.asyncio.sleep", lambda s: waits.append(s) or real_sleep(0))
+    client = Scripted(["a", "b"], {"a": [ProviderError(429), "after wait"], "b": [ProviderError(429)]})
+    assert generate(client, timeout_s=60) == "after wait"
+    assert waits == [Scripted.QUOTA_WAIT_S] and client.calls == ["a", "b", "a"]
+
+
+def test_quota_wait_skipped_when_disabled_or_no_time(monkeypatch):
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr("app.llm.asyncio.sleep", lambda s: real_sleep(0))
+    client = Scripted(["a"], {"a": [ProviderError(429)]})
+    with pytest.raises(LLMError, match="usage limit"):
+        asyncio.run(client.generate("sys", MSG, 60, quota_wait=False))
+    client = Scripted(["a"], {"a": [ProviderError(429)]})
+    with pytest.raises(LLMError):
+        generate(client, timeout_s=15)  # not enough time left to wait
+    assert client.calls == ["a"]
+
+
+def test_chain_falls_back_to_next_provider():
+    from app.llm import ChainClient
+
+    first = Scripted(["g"], {"g": [ProviderError(429)]})
+    second = Scripted(["o"], {"o": ["from openrouter"]})
+    chain = ChainClient([first, second])
+    assert generate(chain) == "from openrouter"
+    assert chain.model_name == "o"
+
+
+def test_chain_raises_last_error_when_all_fail():
+    from app.llm import ChainClient
+
+    chain = ChainClient([Scripted(["g"], {"g": [ProviderError(401)]}), Scripted(["o"], {"o": [ProviderError(402)]})])
+    with pytest.raises(LLMError, match="out of credits"):
+        generate(chain)
+
+
+def test_create_chain_skips_unconfigured_providers():
+    from app.llm import ChainClient, OpenRouterClient
+
+    settings = replace(Settings(), llm_provider="gemini, openrouter", gemini_api_key="", openrouter_api_key="k")
+    assert isinstance(create_llm_client(settings), OpenRouterClient)
+    both = replace(settings, gemini_api_key="g")
+    assert isinstance(create_llm_client(both), ChainClient)
+    with pytest.raises(LLMError, match="Unknown"):
+        create_llm_client(replace(settings, llm_provider="gemini,claude"))

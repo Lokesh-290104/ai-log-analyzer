@@ -55,6 +55,8 @@ class FailoverClient:
     provider = "LLM"
     RETRY_SAME_MODEL_CODES = {500, 502, 503, 504}
     RETRIES_PER_MODEL = 1
+    # Free tiers limit tokens per minute; waiting briefly usually clears a 429.
+    QUOTA_WAIT_S = 12
 
     def __init__(self, models: list[str], call_timeout_ms: int):
         if not models:
@@ -70,15 +72,38 @@ class FailoverClient:
     async def _call(self, model: str, system: str, messages: list[ChatMessage], timeout_s: float) -> str:
         raise NotImplementedError
 
-    async def generate(self, system: str, messages: list[ChatMessage], timeout_s: float) -> str:
+    async def generate(
+        self, system: str, messages: list[ChatMessage], timeout_s: float, quota_wait: bool = True
+    ) -> str:
+        """Try every model; when all of them hit a per-minute quota (429) and time remains,
+        wait for the quota window to reset and try once more."""
         deadline = time.monotonic() + timeout_s
         failures: list[str] = []
+        text = await self._try_models(system, messages, deadline, failures)
+        if text is None and quota_wait and self._all_quota(failures):
+            if deadline - time.monotonic() > self.QUOTA_WAIT_S + 10:
+                await asyncio.sleep(self.QUOTA_WAIT_S)
+                retry_failures: list[str] = []
+                text = await self._try_models(system, messages, deadline, retry_failures)
+                failures += retry_failures
+        if text is None:
+            timed_out = deadline - time.monotonic() < 1
+            raise LLMError(self._failure_message(failures, timed_out=timed_out))
+        return text
+
+    @staticmethod
+    def _all_quota(failures: list[str]) -> bool:
+        return bool(failures) and all(f.endswith(": 429") for f in failures)
+
+    async def _try_models(
+        self, system: str, messages: list[ChatMessage], deadline: float, failures: list[str]
+    ) -> str | None:
         ordered = [self._preferred] + [m for m in self.models if m != self._preferred]
         for model in ordered:
             for attempt in range(self.RETRIES_PER_MODEL + 1):
                 remaining = deadline - time.monotonic()
                 if remaining < 1:
-                    raise LLMError(self._failure_message(failures, timed_out=True))
+                    return None
                 budget = min(self._call_timeout_s, remaining)
                 try:
                     text = await asyncio.wait_for(self._call(model, system, messages, budget), budget)
@@ -93,7 +118,7 @@ class FailoverClient:
                     break
                 self._preferred = model
                 return text
-        raise LLMError(self._failure_message(failures))
+        return None
 
     def _failure_message(self, failures: list[str], timed_out: bool = False) -> str:
         codes = {f.rsplit(": ", 1)[-1] for f in failures}
@@ -181,13 +206,56 @@ class OpenRouterClient(FailoverClient):
             raise ProviderError(502, "unexpected response shape") from None
 
 
+class ChainClient:
+    """Several providers in order (LLM_PROVIDER=gemini,openrouter): when one is out of quota
+    or down, the next answers. Only the last provider waits out a per-minute quota."""
+
+    def __init__(self, clients: list[FailoverClient]):
+        self.clients = clients
+        self._active = clients[0]
+
+    @property
+    def model_name(self) -> str:
+        return self._active.model_name
+
+    async def generate(self, system: str, messages: list[ChatMessage], timeout_s: float) -> str:
+        deadline = time.monotonic() + timeout_s
+        errors = []
+        for i, client in enumerate(self.clients):
+            remaining = deadline - time.monotonic()
+            if remaining < 1:
+                break
+            try:
+                text = await client.generate(system, messages, remaining, quota_wait=i == len(self.clients) - 1)
+            except LLMError as e:
+                errors.append(str(e))
+                continue
+            self._active = client
+            return text
+        raise LLMError(errors[-1] if errors else "The AI service took too long to respond. Please try again later.")
+
+
+_PROVIDERS = {"gemini": GeminiClient, "openrouter": OpenRouterClient}
+
+
 def create_llm_client(settings: Settings) -> LLMClient:
-    """The provider named by LLM_PROVIDER. Raises LLMError when it isn't configured."""
-    if settings.llm_provider == "openrouter":
-        return OpenRouterClient(settings)
-    if settings.llm_provider == "gemini":
-        return GeminiClient(settings)
-    raise LLMError(f"Unknown LLM_PROVIDER '{settings.llm_provider}'. Use 'gemini' or 'openrouter'.")
+    """The provider(s) named by LLM_PROVIDER, comma-separated in fallback order.
+
+    Raises LLMError when none is configured. With several providers, ones missing a key are
+    skipped so a partial setup still works."""
+    names = [n.strip() for n in settings.llm_provider.split(",") if n.strip()]
+    unknown = [n for n in names if n not in _PROVIDERS]
+    if unknown or not names:
+        raise LLMError(f"Unknown LLM_PROVIDER '{settings.llm_provider}'. Use 'gemini', 'openrouter' or both.")
+    clients, errors = [], []
+    for name in names:
+        try:
+            clients.append(_PROVIDERS[name](settings))
+        except LLMError as e:
+            errors.append(str(e))
+    if not clients:
+        raise LLMError(" ".join(errors))
+    return clients[0] if len(clients) == 1 else ChainClient(clients)
 
 
 class FakeLLM:
