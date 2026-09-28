@@ -11,7 +11,7 @@ a guessed answer.
 > does arithmetic. Every number in an answer must appear in a tool result the answer cites,
 > or the answer is rejected.
 
-**Live demo:** https://ai-log-analyzer.onrender.com (free tier: the first request after idle takes ~1 min to wake up)
+**Live demo:** https://ai-log-analyzer-z1zs.onrender.com (free tier: the first request after idle takes ~1 min to wake up)
 · Click **Try the sample incident log**, then ask *"What happened between 10:40 and 10:50?"*
 
 ![Answer with verified numbers and the tool calls behind it](docs/screenshot-answer.png)
