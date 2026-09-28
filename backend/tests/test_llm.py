@@ -166,4 +166,4 @@ def test_create_chain_skips_unconfigured_providers():
     both = replace(settings, gemini_api_key="g")
     assert isinstance(create_llm_client(both), ChainClient)
     with pytest.raises(LLMError, match="Unknown"):
-        create_llm_client(replace(settings, llm_provider="gemini,claude"))
+        create_llm_client(replace(settings, llm_provider="gemini,nope"))

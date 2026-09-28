@@ -9,3 +9,4 @@ frontend/dist/
 backend/static/
 .vite/
 coverage/
+

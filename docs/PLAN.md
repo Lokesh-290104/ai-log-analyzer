@@ -147,7 +147,7 @@ Required: `backend/tests/test_parser.py`, `test_tools.py`, `test_agent.py`, `tes
 ### Decision ledger
 | ID | Question | Options | Recommended | Answer |
 |----|----------|---------|-------------|--------|
-| D1 | gstack routing rules in CLAUDE.md | A add / B skip | A | A (auto, user instruction) |
+| D1 | gstack skill routing rules (local project notes) | A add / B skip | A | A (auto, user instruction) |
 | D2 | cross-project learnings | A enable / B project-only | A | A (auto) |
 | D3 | structure (complexity gate) | A original / B smaller | A (no smaller arrangement keeps features) | A (auto) |
 | R1 | upload cap (finding 1) | A 5 MB/100k lines + 413 / B none | A | A (auto) |
