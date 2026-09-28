@@ -160,9 +160,10 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Ask' }))
     expect(screen.getByRole('button', { name: /analyzing/i })).toBeDisabled()
     expect(screen.getByText(/the agent is choosing tools/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/question about the log/i)).toHaveValue('')
 
     resolve({ body: answered })
-    const card = await screen.findByRole('article', { name: /which service has the most errors/i })
+    const card = await screen.findByRole('article', { name: /^answer to: which service has the most errors/i })
     expect(within(card).getByText(/payments has the most errors: 144/)).toBeInTheDocument()
     expect(within(card).getByText(/verified/i)).toHaveTextContent('(144, 74.6) found in tool result #1')
     expect(within(card).getByText('count_by')).toBeInTheDocument()
@@ -191,6 +192,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Ask' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('at most 6 per minute')
     expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled()
+    expect(screen.getByLabelText(/question about the log/i)).toHaveValue('errors?')  // restored for retry
   })
 
   it('shows upload errors from the server', async () => {
@@ -225,6 +227,23 @@ describe('App', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: /sample incident log/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server')
+  })
+})
+
+describe('conversation layout', () => {
+  it('shows only the latest answer and folds older ones into Earlier questions', async () => {
+    let n = 0
+    routes[`POST /api/uploads/${upload.id}/ask`] = () => ({ body: { ...answered, id: `a${++n}`, question: `question ${n}?` } })
+    const user = await openSample()
+    const box = screen.getByLabelText(/question about the log/i)
+    await user.type(box, 'question 1?{enter}')
+    await screen.findByRole('article', { name: /question 1\?/ })
+    expect(screen.queryByText(/earlier questions/i)).not.toBeInTheDocument()
+    await user.type(box, 'question 2?{enter}')
+    await screen.findByRole('article', { name: /question 2\?/ })
+    const earlier = screen.getByText('Earlier questions (1)').closest('details') as HTMLElement
+    expect(earlier).not.toHaveAttribute('open')
+    expect(within(earlier).getByRole('article', { name: /question 1\?/ })).toBeInTheDocument()
   })
 })
 

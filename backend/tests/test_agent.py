@@ -169,3 +169,20 @@ def test_parse_step_tolerates_wrappers(raw):
 def test_parse_step_rejects_bad_shapes(raw):
     with pytest.raises(StepParseError):
         parse_step(raw)
+
+
+def test_follow_up_questions_get_earlier_answers_as_context(small_entries):
+    llm = FakeLLM([final("It is a payments database problem.", [])])
+    history = [("Which service errors most?", "payments had 2 errors.")]
+    asyncio.run(Agent(llm).answer("so how do I fix it?", small_entries, summary(small_entries, NoArgs()), history))
+    first = llm.calls[0][1][0].content
+    assert "Q: Which service errors most?\nA: payments had 2 errors." in first
+    assert first.endswith("Question: so how do I fix it?")
+
+
+def test_numbers_from_earlier_answers_are_not_evidence(small_entries):
+    history = [("How many errors?", "There were 3 errors.")]
+    llm = FakeLLM([final("As before, there were 3 errors.", [])])
+    outcome = asyncio.run(Agent(llm, max_repairs=0).answer(
+        "and again?", small_entries, summary(small_entries, NoArgs()), history))
+    assert outcome.error_code == "unverified_answer"

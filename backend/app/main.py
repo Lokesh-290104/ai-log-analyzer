@@ -165,6 +165,17 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
             app.state.cache.put(upload_id, entries)
         return entries
 
+    async def recent_history(upload_id: str) -> list[tuple[str, str]]:
+        if settings.history_turns <= 0:
+            return []
+        async with app.state.db.sessions() as session:
+            rows = await session.execute(
+                select(Analysis.question, Analysis.answer)
+                .where(Analysis.upload_id == upload_id, Analysis.status == "answered")
+                .order_by(Analysis.created_at.desc()).limit(settings.history_turns)
+            )
+            return [(q, a) for q, a in reversed(rows.all())]
+
     @app.get("/api/health")
     async def health():
         try:
@@ -206,7 +217,8 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
         except LLMError as e:
             raise HTTPException(503, str(e)) from None
         agent = Agent(llm, settings.max_agent_steps, settings.max_repairs, settings.agent_deadline_ms / 1000)
-        outcome = await agent.answer(body.question, await get_entries(upload_id), upload.overview)
+        history = await recent_history(upload_id)
+        outcome = await agent.answer(body.question, await get_entries(upload_id), upload.overview, history)
         analysis = Analysis(
             upload_id=upload_id, question=body.question, status=outcome.status, answer=outcome.answer,
             error_code=outcome.error_code, error=outcome.error, trace=outcome.trace,

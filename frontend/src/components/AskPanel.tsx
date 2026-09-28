@@ -1,76 +1,84 @@
-import { useState } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 
+// Generic on purpose: they must make sense for any uploaded log, not just the sample.
 const SUGGESTIONS = [
+  'What is causing the errors?',
   'Which service has the most errors?',
-  'When did the first database timeout happen?',
+  'When did the errors start?',
   'When was the error spike at its peak?',
-  'What are the top 3 error messages?',
 ]
 
 interface Props {
   busy: boolean
   error: string | null
+  showSuggestions: boolean
   onAsk: (question: string) => void
 }
 
-export function AskPanel({ busy, error, onAsk }: Props) {
+export interface AskPanelHandle {
+  /** Put a question back in the box (e.g. after a failed request) and focus it. */
+  restore: (question: string) => void
+}
+
+/** The question box, pinned to the bottom of the screen so it's always reachable. */
+export const AskPanel = forwardRef<AskPanelHandle, Props>(function AskPanel(
+  { busy, error, showSuggestions, onAsk },
+  ref,
+) {
   const [question, setQuestion] = useState('')
+  const input = useRef<HTMLInputElement>(null)
   const trimmed = question.trim()
+
+  useImperativeHandle(ref, () => ({
+    restore(q: string) {
+      setQuestion(q)
+      input.current?.focus()
+    },
+  }))
 
   function submit(q: string) {
     if (busy || q.trim().length < 3) return
+    setQuestion('')
     onAsk(q.trim())
   }
 
   return (
-    <section className="card" aria-labelledby="ask-title">
-      <h2 id="ask-title">3. Ask a question</h2>
-      <form
-        className="ask-form"
-        onSubmit={(e) => {
-          e.preventDefault()
-          submit(question)
-        }}
-      >
-        <input
-          aria-label="Question about the log"
-          placeholder="e.g. What happened between 10:40 and 10:50?"
-          maxLength={500}
-          value={question}
-          disabled={busy}
-          onChange={(e) => setQuestion(e.target.value)}
-        />
-        <button type="submit" disabled={busy || trimmed.length < 3}>
-          {busy ? 'Analyzing…' : 'Ask'}
-        </button>
-      </form>
-      <div className="chips">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            className="chip"
-            disabled={busy}
-            onClick={() => {
-              setQuestion(s)
-              submit(s)
-            }}
-          >
-            {s}
+    <div className="ask-bar">
+      <div className="ask-inner">
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        {showSuggestions && (
+          <div className="chips">
+            {SUGGESTIONS.map((s) => (
+              <button key={s} type="button" className="chip" disabled={busy} onClick={() => submit(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+        <form
+          className="ask-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            submit(question)
+          }}
+        >
+          <input
+            ref={input}
+            aria-label="Question about the log"
+            placeholder="Ask about this log, e.g. What is causing the errors?"
+            maxLength={500}
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+          />
+          <button type="submit" disabled={busy || trimmed.length < 3}>
+            {busy ? 'Analyzing…' : 'Ask'}
           </button>
-        ))}
+        </form>
       </div>
-      {busy && (
-        <p className="loading" role="status">
-          <span className="spinner" aria-hidden /> The agent is choosing tools; code is computing the numbers and
-          checking the answer… (usually 5–20 s)
-        </p>
-      )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-    </section>
+    </div>
   )
-}
+})

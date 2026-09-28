@@ -68,6 +68,8 @@ class Settings:
     # Agent loop bounds: model turns per question, and how many invalid replies it may fix.
     max_agent_steps: int = field(default_factory=lambda: _int("MAX_AGENT_STEPS", 6, 1))
     max_repairs: int = field(default_factory=lambda: _int("MAX_REPAIRS", 2, 0))
+    # Earlier answered questions on the same upload sent as context, so follow-ups work.
+    history_turns: int = field(default_factory=lambda: _int("HISTORY_TURNS", 2, 0))
 
     # Upload limits: protect the free-tier instance's memory and the database.
     max_upload_bytes: int = field(default_factory=lambda: _int("MAX_UPLOAD_BYTES", 5_000_000, 1000))

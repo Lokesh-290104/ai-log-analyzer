@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from app.judge import judge_answer, result_json
 from app.llm import ChatMessage, LLMClient, LLMError
 from app.parser import LogEntry
-from app.prompts import build_system_prompt, repair_message, tool_result_message
+from app.prompts import build_system_prompt, question_message, repair_message, tool_result_message
 from app.tools import TOOLS
 
 MAX_RESULT_CHARS = 12_000
@@ -121,11 +121,17 @@ class Agent:
         self.max_repairs = max_repairs
         self.deadline_s = deadline_s
 
-    async def answer(self, question: str, entries: list[LogEntry], overview: dict) -> AgentOutcome:
+    async def answer(
+        self, question: str, entries: list[LogEntry], overview: dict,
+        history: list[tuple[str, str]] | None = None,
+    ) -> AgentOutcome:
+        """`history`: earlier (question, answer) pairs, oldest first, so follow-ups like
+        "how do I fix it?" have a referent. Earlier answers are context, never evidence:
+        the judge only accepts figures from this run's tool results."""
         started = time.monotonic()
         deadline = started + self.deadline_s
         system = build_system_prompt(overview)
-        run = _Run(question=question, messages=[ChatMessage("user", f"Question: {question}")])
+        run = _Run(question=question, messages=[ChatMessage("user", question_message(question, history or []))])
 
         for _ in range(self.max_steps):
             remaining = deadline - time.monotonic()

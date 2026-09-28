@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from './api'
 import type { Analysis, UploadInfo } from './types'
 import { UploadPanel } from './components/UploadPanel'
 import { OverviewPanel } from './components/OverviewPanel'
-import { AskPanel } from './components/AskPanel'
+import { AskPanel, type AskPanelHandle } from './components/AskPanel'
 import { AnswerCard } from './components/AnswerCard'
 
 // The upload id lives in the URL hash so a refresh (or a shared link) reopens the same log.
@@ -11,11 +11,15 @@ const readHashId = () => /^#\/u\/([\w-]+)$/.exec(window.location.hash)?.[1] ?? n
 
 export default function App() {
   const [upload, setUpload] = useState<UploadInfo | null>(null)
+  // Newest first, as the API returns them.
   const [analyses, setAnalyses] = useState<Analysis[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [asking, setAsking] = useState(false)
+  const [pending, setPending] = useState<string | null>(null)
   const [askError, setAskError] = useState<string | null>(null)
+  const askPanel = useRef<AskPanelHandle>(null)
+  const current = useRef<HTMLDivElement>(null)
+  const scrollOnChange = useRef(false)
 
   const open = useCallback(async (load: Promise<UploadInfo>) => {
     setUploading(true)
@@ -41,17 +45,25 @@ export default function App() {
     if (id) void open(api.getUpload(id))
   }, [open])
 
+  // After asking, bring the question (then its answer) into view above the pinned ask bar.
+  const latestId = analyses[0]?.id
+  useEffect(() => {
+    if (scrollOnChange.current) current.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [pending, latestId])
+
   async function onAsk(question: string) {
     if (!upload) return
-    setAsking(true)
+    scrollOnChange.current = true
+    setPending(question)
     setAskError(null)
     try {
       const analysis = await api.ask(upload.id, question)
       setAnalyses((prev) => [analysis, ...prev])
     } catch (e) {
       setAskError(e instanceof Error ? e.message : 'The question failed.')
+      askPanel.current?.restore(question)
     } finally {
-      setAsking(false)
+      setPending(null)
     }
   }
 
@@ -59,11 +71,17 @@ export default function App() {
     setUpload(null)
     setAnalyses([])
     setUploadError(null)
+    setAskError(null)
+    scrollOnChange.current = false
     window.history.replaceState(null, '', window.location.pathname)
   }
 
+  // Only the latest exchange is shown; older ones fold into "Earlier questions".
+  const latest = pending ? null : (analyses[0] ?? null)
+  const earlier = pending ? analyses : analyses.slice(1)
+
   return (
-    <div className="page">
+    <div className={`page${upload ? ' with-ask-bar' : ''}`}>
       <header className="header">
         <div>
           <h1>AI Log Analyzer</h1>
@@ -101,14 +119,45 @@ export default function App() {
       {upload && (
         <>
           <OverviewPanel upload={upload} />
-          <AskPanel busy={asking} error={askError} onAsk={onAsk} />
-          {analyses.length > 0 && (
-            <section className="answers" aria-label="Answers">
-              {analyses.map((a) => (
-                <AnswerCard key={a.id} analysis={a} />
-              ))}
-            </section>
-          )}
+
+          <section className="conversation" aria-label="Questions and answers">
+            {earlier.length > 0 && (
+              <details className="earlier">
+                <summary>Earlier questions ({earlier.length})</summary>
+                <div className="earlier-list">
+                  {earlier.map((a) => (
+                    <AnswerCard key={a.id} analysis={a} />
+                  ))}
+                </div>
+              </details>
+            )}
+            <div ref={current} className="current">
+              {pending && (
+                <article className="answer pending" aria-label={`Analyzing: ${pending}`}>
+                  <div className="question">
+                    <span className="muted small">You asked</span>
+                    <div>{pending}</div>
+                  </div>
+                  <p className="loading" role="status">
+                    <span className="spinner" aria-hidden /> The agent is choosing tools; code is computing the numbers
+                    and checking the answer… (usually 5–30 s)
+                  </p>
+                </article>
+              )}
+              {latest && <AnswerCard analysis={latest} />}
+              {!pending && !latest && (
+                <p className="muted empty-hint">Ask a question below. Each answer shows the tool calls behind it.</p>
+              )}
+            </div>
+          </section>
+
+          <AskPanel
+            ref={askPanel}
+            busy={pending !== null}
+            error={askError}
+            showSuggestions={analyses.length === 0 && pending === null}
+            onAsk={onAsk}
+          />
         </>
       )}
 

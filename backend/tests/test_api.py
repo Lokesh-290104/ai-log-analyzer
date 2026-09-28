@@ -208,3 +208,26 @@ def test_entry_cache_is_bounded_by_total_entries():
     assert cache.get("b") is entries and cache.get("c") is not None
     cache.put("huge", entries * 2)  # larger than the whole budget: not cached
     assert cache.get("huge") is None and cache.get("b") is entries
+
+
+def test_follow_up_sends_recent_answered_questions(make_client):
+    client, llm = make_client([
+        final("First answer.", []), "garbage", "garbage", "garbage", final("Second answer.", []),
+        final("Third answer.", []),
+    ], history_turns=2)
+    upload_id = upload(client).json()["id"]
+    for q in ("first question?", "failing question?", "second question?", "third question?"):
+        client.post(f"/api/uploads/{upload_id}/ask", json={"question": q})
+    last_prompt = llm.calls[-1][1][0].content
+    # Failed analyses are not context; only the 2 most recent answered ones, oldest first.
+    assert "failing question?" not in last_prompt and "first question?" in last_prompt
+    assert last_prompt.index("first question?") < last_prompt.index("second question?")
+    assert last_prompt.endswith("Question: third question?")
+
+
+def test_history_can_be_disabled(make_client):
+    client, llm = make_client([final("One.", []), final("Two.", [])], history_turns=0)
+    upload_id = upload(client).json()["id"]
+    client.post(f"/api/uploads/{upload_id}/ask", json={"question": "first?"})
+    client.post(f"/api/uploads/{upload_id}/ask", json={"question": "second?"})
+    assert llm.calls[-1][1][0].content == "Question: second?"
