@@ -12,7 +12,7 @@ export function OverviewPanel({ upload }: { upload: UploadInfo }) {
   return (
     <section className="card" aria-labelledby="overview-title">
       <div className="card-head">
-        <h2 id="overview-title">2. What's in {upload.name}</h2>
+        <h2 id="overview-title">What's in {upload.name === 'pasted.log' ? 'your pasted log' : upload.name}</h2>
         <span className="muted small">
           {fmtBytes(upload.size_bytes)} · computed by code, no AI
         </span>

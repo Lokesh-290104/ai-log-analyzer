@@ -26,7 +26,7 @@ export function UploadPanel({ busy, onFile, onText, onSample }: Props) {
 
   return (
     <section className="card upload" aria-labelledby="upload-title">
-      <h2 id="upload-title">1. Add a log</h2>
+      <h2 id="upload-title">Add a log</h2>
       <p className="muted">
         Plain text (<code>2026-09-28T10:00:00Z ERROR [payments] …</code>), JSON lines or logfmt. Up to 5 MB.
       </p>
