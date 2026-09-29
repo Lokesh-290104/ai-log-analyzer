@@ -875,6 +875,15 @@ textarea {
   .ask-form button {
     padding: 8px 14px;
   }
+  /* Suggestions: one swipeable row instead of four stacked rows over the content. */
+  .ask-inner .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ask-inner .chip {
+    flex: none;
+  }
   /* Two stat tiles per row instead of one. */
   .tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
