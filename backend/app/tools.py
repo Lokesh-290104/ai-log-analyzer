@@ -95,6 +95,10 @@ class SearchArgs(Filters):
     limit: int = Field(10, ge=1, le=MAX_LIST, description="How many matches to include.")
 
 
+class ChangeEventsArgs(Filters):
+    limit: int = Field(20, ge=1, le=MAX_LIST, description="How many events to return.")
+
+
 class TimelineArgs(Filters):
     bucket_minutes: Literal[1, 5, 15, 60] | None = Field(
         None, description="Bucket size in minutes; omitted = chosen from the time range."
@@ -327,6 +331,45 @@ def timeline(entries: list[LogEntry], args: TimelineArgs) -> dict:
     }
 
 
+# Words that mark a change to the system or its recovery. Matched case-insensitively in messages.
+_CHANGE_WORDS = re.compile(
+    r"deploy|roll(?:ed|ing)?[ -]?back|release|version|restart|reboot|config|migrat|upgrade|downgrade|"
+    r"scal(?:e|ed|ing)|feature flag|failover|recover|resolved|restored",
+    re.I,
+)
+
+
+def change_events(entries: list[LogEntry], args: ChangeEventsArgs) -> dict:
+    """Deploys, rollbacks, restarts, config changes and recoveries, each labeled relative to
+    the errors (before / during / after) so the model never has to order timestamps itself."""
+    selected = _select(entries, args)
+    errors = [e for e in selected if e.level in ERROR_LEVELS]
+    first_err = errors[0].ts if errors else None
+    last_err = errors[-1].ts if errors else None
+    events = []
+    for e in selected:
+        if not _CHANGE_WORDS.search(e.message):
+            continue
+        if first_err is None:
+            when = "no_errors"
+        elif e.ts < first_err:
+            when = "before_first_error"
+        elif e.ts > last_err:
+            when = "after_last_error"
+        else:
+            when = "during_errors"
+        events.append(entry_dict(e) | {"relative_to_errors": when})
+    shown = events[: args.limit]
+    return {
+        "filters": _filters_echo(args),
+        "first_error_ts": iso(first_err) if first_err else None,
+        "last_error_ts": iso(last_err) if last_err else None,
+        "total_matching": len(events),
+        "events": shown,
+        "events_returned": len(shown),
+    }
+
+
 # ---------------------------------------------------------------- registry
 
 @dataclass(frozen=True)
@@ -357,6 +400,9 @@ TOOLS: dict[str, Tool] = {
         Tool("search", "Case-insensitive text search in messages and stack traces; count plus matching lines.",
              SearchArgs, search),
         Tool("timeline", "Entry and error counts per time bucket, and the peak bucket.", TimelineArgs, timeline),
+        Tool("change_events", "Deploys, rollbacks, restarts, config/version changes and recoveries, each labeled "
+             "before_first_error / during_errors / after_last_error. Use for root-cause and recovery questions.",
+             ChangeEventsArgs, change_events),
     ]
 }
 

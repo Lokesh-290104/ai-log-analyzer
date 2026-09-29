@@ -174,3 +174,34 @@ def test_timeline_widens_a_requested_size_that_would_be_too_fine():
     t = run(entries, "timeline", bucket_minutes=1)
     assert t["bucket_minutes"] == 360 and len(t["buckets"]) <= 200
     assert t["buckets"][0]["start"] == "2026-09-01T00:00:00Z"
+
+
+INCIDENT = """2026-09-29 14:00:00 INFO [deploy] Starting deployment version=2.4.0
+2026-09-29 14:02:00 WARN [database] Connection pool utilization=85%
+2026-09-29 14:04:00 ERROR [database] Connection pool exhausted
+2026-09-29 14:04:05 ERROR [api] POST /api/orders status=500
+2026-09-29 14:04:10 INFO [kubelet] Restarting container
+2026-09-29 14:04:30 CRITICAL [monitor] Error rate exceeded threshold
+2026-09-29 14:05:00 WARN [deploy] Initiating rollback to version=2.3.9
+2026-09-29 14:08:00 INFO [monitor] Service recovered
+"""
+
+
+def test_change_events_are_labeled_relative_to_the_errors():
+    r = run(parse_logs(INCIDENT).entries, "change_events")
+    assert (r["first_error_ts"], r["last_error_ts"]) == ("2026-09-29T14:04:00Z", "2026-09-29T14:04:30Z")
+    labels = [(e["message"][:22], e["relative_to_errors"]) for e in r["events"]]
+    assert labels == [
+        ("Starting deployment ve", "before_first_error"),
+        ("Restarting container", "during_errors"),
+        ("Initiating rollback to", "after_last_error"),
+        ("Service recovered", "after_last_error"),
+    ]
+    assert r["total_matching"] == 4  # the pool warning and plain errors are not change events
+
+
+def test_change_events_without_errors(small_entries):
+    entries = parse_logs("2026-09-29T10:00:00Z INFO [deploy] Deployed v2\n").entries
+    r = run(entries, "change_events")
+    assert r["first_error_ts"] is None and r["events"][0]["relative_to_errors"] == "no_errors"
+    assert run(small_entries, "change_events")["total_matching"] == 0
