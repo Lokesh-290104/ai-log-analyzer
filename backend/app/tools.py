@@ -342,6 +342,9 @@ _CHANGE_WORDS = re.compile(
 def change_events(entries: list[LogEntry], args: ChangeEventsArgs) -> dict:
     """Deploys, rollbacks, restarts, config changes and recoveries, each labeled relative to
     the errors (before / during / after) so the model never has to order timestamps itself."""
+    # The level filter is ignored on purpose: deploys and rollbacks are INFO/WARN lines, so
+    # "level: ERROR" (a natural model choice) would hide exactly the events being looked for.
+    args = args.model_copy(update={"level": None})
     selected = _select(entries, args)
     errors = [e for e in selected if e.level in ERROR_LEVELS]
     first_err = errors[0].ts if errors else None
@@ -401,7 +404,8 @@ TOOLS: dict[str, Tool] = {
              SearchArgs, search),
         Tool("timeline", "Entry and error counts per time bucket, and the peak bucket.", TimelineArgs, timeline),
         Tool("change_events", "Deploys, rollbacks, restarts, config/version changes and recoveries, each labeled "
-             "before_first_error / during_errors / after_last_error. Use for root-cause and recovery questions.",
+             "before_first_error / during_errors / after_last_error. Use for root-cause and recovery questions. "
+             "Ignores the level filter (changes are usually INFO/WARN lines).",
              ChangeEventsArgs, change_events),
     ]
 }

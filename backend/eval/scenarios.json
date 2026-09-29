@@ -1,0 +1,165 @@
+[
+  {
+    "name": "db-connection-failure",
+    "question": "What is causing the errors?",
+    "log": [
+      "2026-09-29 10:15:00 INFO [database] Initializing database connection",
+      "2026-09-29 10:15:01 INFO [database] Connecting to PostgreSQL at db.internal:5432",
+      "2026-09-29 10:15:06 ERROR [database] Connection timeout after 5000ms",
+      "2026-09-29 10:15:06 ERROR [database] Failed to establish database connection",
+      "2026-09-29 10:15:07 WARN [database] Retrying connection attempt 1/3",
+      "2026-09-29 10:15:12 ERROR [database] Connection timeout after 5000ms",
+      "2026-09-29 10:15:13 WARN [database] Retrying connection attempt 2/3",
+      "2026-09-29 10:15:18 ERROR [database] Connection timeout after 5000ms",
+      "2026-09-29 10:15:19 ERROR [api] GET /api/users failed with status=500",
+      "2026-09-29 10:15:20 CRITICAL [database] All connection attempts exhausted",
+      "2026-09-29 10:15:21 ERROR [health] Database health check failed"
+    ],
+    "must": [["database", "db"], ["timeout", "unreachable", "connect"], ["api", "500"]],
+    "must_not": ["<n>"]
+  },
+  {
+    "name": "k8s-crashloop",
+    "question": "Why is the pod crash looping?",
+    "log": [
+      "2026-09-29T15:00:00Z INFO [kubelet] Pod api-server-7d8f created",
+      "2026-09-29T15:00:05Z INFO [scheduler] Pod scheduled to node worker-01",
+      "2026-09-29T15:00:10Z INFO [container] Container started",
+      "2026-09-29T15:00:20Z ERROR [probe] Liveness probe failed: HTTP probe failed with statuscode: 500",
+      "2026-09-29T15:00:25Z WARN [kubelet] Container failed liveness probe",
+      "2026-09-29T15:00:30Z WARN [kubelet] Killing container with id=api-server",
+      "2026-09-29T15:00:35Z INFO [kubelet] Restarting container",
+      "2026-09-29T15:00:45Z ERROR [container] Application startup failed: missing environment variable DATABASE_URL",
+      "2026-09-29T15:00:50Z WARN [kubelet] Back-off restarting failed container",
+      "2026-09-29T15:01:00Z ERROR [kubelet] CrashLoopBackOff"
+    ],
+    "must": [["DATABASE_URL"], ["environment variable", "env var", "env"]],
+    "must_not": []
+  },
+  {
+    "name": "deploy-regression-rollback",
+    "question": "What caused the incident and how did it recover?",
+    "log": [
+      "2026-09-29 14:00:00 INFO [deploy] Starting deployment version=2.4.0",
+      "2026-09-29 14:00:10 INFO [deploy] Deployment completed successfully",
+      "2026-09-29 14:01:00 INFO [api] GET /api/orders status=200 duration=100ms",
+      "2026-09-29 14:02:00 WARN [database] Connection pool utilization=85%",
+      "2026-09-29 14:03:00 WARN [database] Connection pool utilization=95%",
+      "2026-09-29 14:04:00 ERROR [database] Connection pool exhausted",
+      "2026-09-29 14:04:05 ERROR [api] POST /api/orders status=500 error=\"connection unavailable\"",
+      "2026-09-29 14:04:10 ERROR [api] GET /api/orders status=500 error=\"connection unavailable\"",
+      "2026-09-29 14:04:15 WARN [queue] Pending requests=500",
+      "2026-09-29 14:04:20 ERROR [api] Request timeout duration=30000ms",
+      "2026-09-29 14:04:30 CRITICAL [monitor] Error rate exceeded threshold",
+      "2026-09-29 14:05:00 WARN [deploy] Initiating rollback to version=2.3.9",
+      "2026-09-29 14:05:30 INFO [deploy] Rollback completed",
+      "2026-09-29 14:06:00 INFO [database] Connection pool utilization=40%",
+      "2026-09-29 14:07:00 INFO [api] GET /api/orders status=200 duration=120ms",
+      "2026-09-29 14:08:00 INFO [monitor] Service recovered"
+    ],
+    "must": [["2.4.0"], ["rollback", "rolled back", "roll back"], ["pool"]],
+    "must_not": []
+  },
+  {
+    "name": "disk-full",
+    "question": "What is causing the errors?",
+    "log": [
+      "2026-09-29T09:00:00Z INFO [ingest] Batch 1041 written (512 records)",
+      "2026-09-29T09:05:00Z WARN [node-exporter] Disk usage on /var/lib/data at 91%",
+      "2026-09-29T09:10:00Z WARN [node-exporter] Disk usage on /var/lib/data at 97%",
+      "2026-09-29T09:12:10Z ERROR [ingest] Failed to write batch 1042: No space left on device",
+      "2026-09-29T09:12:40Z ERROR [ingest] Failed to write batch 1043: No space left on device",
+      "2026-09-29T09:13:00Z ERROR [postgres] could not extend file \"base/16384/2619\": No space left on device",
+      "2026-09-29T09:13:05Z ERROR [api] POST /events status=503 error=\"storage unavailable\"",
+      "2026-09-29T09:14:00Z WARN [ingest] Dropping batch 1044 after 3 retries"
+    ],
+    "must": [["disk", "space", "storage"], ["/var/lib/data", "full", "no space"]],
+    "must_not": []
+  },
+  {
+    "name": "expired-tls-cert",
+    "question": "Why are payments failing?",
+    "log": [
+      "2026-09-29T00:00:00Z INFO [payments] Health check OK",
+      "2026-09-29T00:00:02Z WARN [cert-monitor] Certificate for api.paygate.example expires at 2026-09-29T00:00:00Z",
+      "2026-09-29T00:01:10Z ERROR [payments] Charge failed: SSL handshake failed: certificate has expired (api.paygate.example)",
+      "2026-09-29T00:01:40Z ERROR [payments] Charge failed: SSL handshake failed: certificate has expired (api.paygate.example)",
+      "2026-09-29T00:02:15Z ERROR [payments] Charge failed: SSL handshake failed: certificate has expired (api.paygate.example)",
+      "2026-09-29T00:02:30Z ERROR [checkout] Order ORD-5521 could not be paid",
+      "2026-09-29T00:03:00Z INFO [payments] Health check OK"
+    ],
+    "must": [["certificate", "cert", "tls", "ssl"], ["expired", "expir"]],
+    "must_not": []
+  },
+  {
+    "name": "upstream-rate-limit",
+    "question": "What is causing the errors?",
+    "log": [
+      "2026-09-29T12:00:00Z INFO [notifier] Sending 2400 SMS for campaign spring-sale",
+      "2026-09-29T12:00:05Z ERROR [notifier] SMS provider returned 429 Too Many Requests",
+      "2026-09-29T12:00:06Z WARN [notifier] Retrying in 1s",
+      "2026-09-29T12:00:07Z ERROR [notifier] SMS provider returned 429 Too Many Requests",
+      "2026-09-29T12:00:09Z WARN [notifier] Retrying in 2s",
+      "2026-09-29T12:00:11Z ERROR [notifier] SMS provider returned 429 Too Many Requests",
+      "2026-09-29T12:00:20Z WARN [queue] notifications backlog=1850",
+      "2026-09-29T12:01:00Z ERROR [notifier] Giving up on 312 messages after max retries"
+    ],
+    "must": [["429", "rate limit", "rate-limit", "too many requests"], ["sms", "provider", "notifier"]],
+    "must_not": []
+  },
+  {
+    "name": "feature-flag-regression",
+    "question": "What caused the spike in errors and what fixed it?",
+    "log": [
+      "2026-09-29T16:00:00Z INFO [checkout] Request completed status=200",
+      "2026-09-29T16:10:00Z INFO [flags] Feature flag new_tax_engine enabled for 100% of users",
+      "2026-09-29T16:10:05Z ERROR [checkout] NullPointerException in TaxCalculator.compute",
+      "2026-09-29T16:10:06Z ERROR [checkout] NullPointerException in TaxCalculator.compute",
+      "2026-09-29T16:10:09Z ERROR [checkout] NullPointerException in TaxCalculator.compute",
+      "2026-09-29T16:10:20Z ERROR [checkout] Request failed status=500",
+      "2026-09-29T16:12:00Z INFO [flags] Feature flag new_tax_engine disabled",
+      "2026-09-29T16:12:05Z INFO [checkout] Request completed status=200"
+    ],
+    "must": [["new_tax_engine", "feature flag", "flag"], ["disabl", "turned off", "switched off"]],
+    "must_not": []
+  },
+  {
+    "name": "red-herring-dns",
+    "question": "What is the real problem in this log?",
+    "log": [
+      "2026-09-29T08:00:00Z WARN [cache] Cache miss for key user:1001",
+      "2026-09-29T08:00:01Z WARN [cache] Cache miss for key user:1002",
+      "2026-09-29T08:00:02Z WARN [cache] Cache miss for key user:1003",
+      "2026-09-29T08:00:03Z WARN [cache] Cache miss for key user:1004",
+      "2026-09-29T08:00:04Z WARN [cache] Cache miss for key user:1005",
+      "2026-09-29T08:00:05Z WARN [cache] Cache miss for key user:1006",
+      "2026-09-29T08:00:10Z ERROR [orders] Failed to call inventory: getaddrinfo ENOTFOUND inventory.svc.cluster.local",
+      "2026-09-29T08:00:20Z ERROR [orders] Failed to call inventory: getaddrinfo ENOTFOUND inventory.svc.cluster.local",
+      "2026-09-29T08:00:25Z ERROR [orders] Order ORD-9001 failed: inventory check unavailable",
+      "2026-09-29T08:00:30Z WARN [cache] Cache miss for key user:1007"
+    ],
+    "must": [["dns", "enotfound", "resolve", "getaddrinfo"], ["inventory"]],
+    "must_not": []
+  },
+  {
+    "name": "healthy-log",
+    "question": "Are there any problems in this log?",
+    "log": [
+      "2026-09-29T11:00:00Z INFO [api] GET /health status=200",
+      "2026-09-29T11:00:05Z INFO [api] GET /products status=200 duration=42ms",
+      "2026-09-29T11:00:10Z INFO [worker] Job 88 completed",
+      "2026-09-29T11:00:15Z INFO [api] GET /products status=200 duration=38ms",
+      "2026-09-29T11:00:20Z INFO [worker] Job 89 completed"
+    ],
+    "must": [["no error", "no problem", "no issue", "healthy", "0 error", "no warning", "zero error", "doesn't show any", "does not show any", "no sign"]],
+    "must_not": []
+  },
+  {
+    "name": "follow-up-fix",
+    "question": "How do I fix it?",
+    "history": [["What caused the incident?", "The deployment of version 2.4.0 likely exhausted the database connection pool; a rollback to 2.3.9 restored service."]],
+    "log_from": "deploy-regression-rollback",
+    "must": [["2.4.0"], ["connection", "pool"]],
+    "must_not": []
+  }
+]

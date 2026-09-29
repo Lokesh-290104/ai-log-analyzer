@@ -29,13 +29,28 @@ MAX_RESULT_CHARS = 12_000
 MAX_RAW_IN_TRACE = 600
 
 
-class ToolCallStep(BaseModel):
+MAX_CALLS_PER_STEP = 4
+
+
+class ToolCallItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    type: Literal["tool_call"]
     tool: str = Field(min_length=1, max_length=50)
     args: dict = Field(default_factory=dict)
     reason: str = Field("", max_length=300)
+
+
+class ToolCallStep(ToolCallItem):
+    type: Literal["tool_call"]
+
+
+class ToolCallsStep(BaseModel):
+    """Several independent tool calls in one reply: fewer model round-trips per question."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    type: Literal["tool_calls"]
+    calls: list[ToolCallItem] = Field(min_length=1, max_length=MAX_CALLS_PER_STEP)
 
 
 class FinalAnswerStep(BaseModel):
@@ -46,7 +61,7 @@ class FinalAnswerStep(BaseModel):
     evidence: list[int] = Field(default_factory=list, max_length=20)
 
 
-AgentStep = Annotated[ToolCallStep | FinalAnswerStep, Field(discriminator="type")]
+AgentStep = Annotated[ToolCallStep | ToolCallsStep | FinalAnswerStep, Field(discriminator="type")]
 _STEP = TypeAdapter(AgentStep)
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
@@ -55,7 +70,7 @@ class StepParseError(ValueError):
     pass
 
 
-def parse_step(raw: str) -> ToolCallStep | FinalAnswerStep:
+def parse_step(raw: str) -> ToolCallStep | ToolCallsStep | FinalAnswerStep:
     """Model text -> validated step. Tolerates code fences and prose around one JSON object."""
     text = _FENCE.sub("", (raw or "").strip())
     try:
@@ -151,8 +166,9 @@ class Agent:
                     return self._fail(run, "invalid_output", started)
                 continue
 
-            if isinstance(step, ToolCallStep):
-                problem = self._run_tool(run, step, entries)
+            if isinstance(step, (ToolCallStep, ToolCallsStep)):
+                calls = step.calls if isinstance(step, ToolCallsStep) else [step]
+                problem = self._run_tools(run, calls, entries)
                 if problem and not self._repair(run, "tool", problem, raw):
                     return self._fail(run, "invalid_output", started)
                 continue
@@ -169,27 +185,34 @@ class Agent:
 
         return self._fail(run, "step_limit", started)
 
-    def _run_tool(self, run: _Run, step: ToolCallStep, entries: list[LogEntry]) -> str | None:
-        """Run one tool call. Returns a problem description when the call itself is invalid."""
-        tool = TOOLS.get(step.tool)
-        if tool is None:
-            return f"unknown tool '{step.tool}'. Available: {', '.join(TOOLS)}"
-        t0 = time.monotonic()
-        try:
-            args, result = tool.run(entries, step.args)
-        except ValidationError as e:
-            return f"invalid args for {step.tool}: {_short_errors(e)}"
-        call_id = len(run.results) + 1
-        run.results[call_id] = result
-        run.trace.append({
-            "kind": "tool_call", "id": call_id, "tool": step.tool,
-            "args": args.model_dump(mode="json", exclude_none=True), "reason": step.reason,
-            "result": result, "ms": _ms(t0),
-        })
-        text = result_json(result)
-        if len(text) > MAX_RESULT_CHARS:
-            text = text[:MAX_RESULT_CHARS] + '..." (truncated)'
-        run.messages.append(ChatMessage("user", tool_result_message(call_id, step.tool, text)))
+    def _run_tools(self, run: _Run, calls: list[ToolCallItem], entries: list[LogEntry]) -> str | None:
+        """Validate every call first, then run them all. All-or-nothing: if any call is invalid
+        (unknown tool, bad args) none run and the problem goes back to the model to fix."""
+        validated = []
+        for call in calls:
+            tool = TOOLS.get(call.tool)
+            if tool is None:
+                return f"unknown tool '{call.tool}'. Available: {', '.join(TOOLS)}"
+            try:
+                validated.append((call, tool, tool.args_model.model_validate(call.args or {})))
+            except ValidationError as e:
+                return f"invalid args for {call.tool}: {_short_errors(e)}"
+        parts = []
+        for call, tool, args in validated:
+            t0 = time.monotonic()
+            result = tool.fn(entries, args)
+            call_id = len(run.results) + 1
+            run.results[call_id] = result
+            run.trace.append({
+                "kind": "tool_call", "id": call_id, "tool": call.tool,
+                "args": args.model_dump(mode="json", exclude_none=True), "reason": call.reason,
+                "result": result, "ms": _ms(t0),
+            })
+            text = result_json(result)
+            if len(text) > MAX_RESULT_CHARS:
+                text = text[:MAX_RESULT_CHARS] + '..." (truncated)'
+            parts.append(tool_result_message(call_id, call.tool, text))
+        run.messages.append(ChatMessage("user", "\n\n".join(parts)))
         return None
 
     def _repair(self, run: _Run, stage: str, problem: str, raw: str, answer: str | None = None) -> bool:

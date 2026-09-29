@@ -54,7 +54,7 @@ class Settings:
     gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemma-4-26b-a4b-it"))
     # Tried in order when the main model is overloaded or unavailable.
     gemini_fallback_models: list[str] = field(
-        default_factory=lambda: _csv(os.getenv("GEMINI_FALLBACK_MODELS", "gemini-flash-latest"))
+        default_factory=lambda: _csv(os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3-flash-preview,gemini-flash-latest"))
     )
     openrouter_api_key: str = field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", "").strip())
     openrouter_models: list[str] = field(

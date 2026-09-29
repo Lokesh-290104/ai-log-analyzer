@@ -27,7 +27,7 @@ a guessed answer.
    stack traces to their entry, and **reports** unrecognized lines instead of guessing.
 2. **Overview, instantly and without an LLM:** totals, error rate, an errors-over-time chart,
    top error messages (ids and numbers normalized so `ORD-123` and `ORD-456` group together).
-3. **Ask a question.** The agent chooses among 7 tools, sees their results, and answers.
+3. **Ask a question.** The agent chooses among 8 tools (several at once when they're independent), sees their results, and answers.
    The UI shows the answer, a **Verified** badge listing every figure checked, and the full
    evidence trail: each tool call's arguments, the model's reason, and the exact result.
 
@@ -36,8 +36,8 @@ a guessed answer.
 ```
  question ─► LLM ─► JSON reply ─► Pydantic AgentStep (discriminated union on "type")
               ▲          │  not JSON / wrong shape ─► repair turn (max 2) ─► still bad ─► FAIL
-              │          ├─ tool_call ─► known tool? args valid (extra="forbid")? ─► no ─► repair turn
-              │          │       └─► run tool (pure Python) ─► TOOL_RESULT id=N (as data) ─┐
+              │          ├─ tool_calls (1-4) ─► all known? all args valid (extra="forbid")? ─► no ─► repair
+              │          │       └─► run tools (pure Python) ─► TOOL_RESULT id=N… (as data) ┐
               │          └─ final_answer {answer, evidence:[ids]}                          │
               │                  └─► judge: cited ids exist? every number/time in the      │
               │                      answer found in the cited results or the question?    │
@@ -78,6 +78,7 @@ a guessed answer.
 | `entries_in_window` | counts and samples between two timestamps |
 | `search` | case-insensitive text search in messages and stack traces |
 | `timeline` | counts and errors per 1/5/15/60-min bucket, and the peak |
+| `change_events` | deploys, rollbacks, restarts, config changes and recoveries, each labeled before / during / after the errors |
 
 All tools share filters (`level`, `service`, `start`, `end`), are pure functions over parsed
 entries, and cap list sizes so large logs can't flood the prompt.
@@ -127,7 +128,7 @@ Design choices worth calling out:
 ## Tests and eval
 
 ```bash
-cd backend && python -m pytest          # 162 tests, offline: FakeLLM + SQLite
+cd backend && python -m pytest          # 174 tests, offline: FakeLLM + SQLite
 cd frontend && npm test                 # Vitest + Testing Library
 ```
 
@@ -141,6 +142,12 @@ cd frontend && npm test                 # Vitest + Testing Library
 - **Eval against the real model** (`python -m eval.run_eval`, needs a key): 12 questions
   including an off-topic question and a prompt-injection attempt. Current result with
   `gemma-4-26b-a4b-it`: **12/12**.
+- **Incident scenarios against the real model** (`python -m eval.run_scenarios`): 10 small incidents
+  (database outage, Kubernetes crash loop, deploy regression + rollback, full disk, expired TLS
+  certificate, provider rate limiting, feature-flag regression, a red herring, a healthy log, a
+  follow-up question). Each lists phrases a correct answer must contain, so reasoning is graded, not
+  just numbers. This suite drove two agent changes: `change_events` (answers used to stop at the
+  first error and miss the deploy that caused it) and batched tool calls (half the model round-trips).
 
 CI (GitHub Actions): backend tests on SQLite and Postgres, frontend lint + tests + build,
 then a Docker build and smoke test of the production image.

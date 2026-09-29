@@ -7,7 +7,7 @@ Not part of CI (needs an API key and spends quota). Run from backend/:
 Scores per question:
   verified  the answer passed the judge (or failed closed: never a wrong answer shown)
   tools     at least one expected tool was used (skipped when none expected)
-  facts     every expected fact appears in the answer
+  facts     every expected fact appears in the answer ("a|b" = either)
 """
 
 import asyncio
@@ -51,7 +51,10 @@ async def main(selected: set[int]) -> int:
         rejections = [t["stage"] for t in outcome.trace if t["kind"] == "rejected"]
         answer = outcome.answer or ""
         tools_ok = not case["expect_tools"] or any(t in case["expect_tools"] for t in tools)
-        facts_ok = outcome.status == "answered" and all(f.lower() in answer.lower() for f in case["expect_in_answer"])
+        # A fact may list alternatives separated by "|" (e.g. "193|192": the total, or ERROR + FATAL parts).
+        facts_ok = outcome.status == "answered" and all(
+            any(alt.lower() in answer.lower() for alt in f.split("|")) for f in case["expect_in_answer"]
+        )
         clean = all(bad.lower() not in answer.lower() for bad in case.get("expect_not_in_answer", []))
         ok = tools_ok and facts_ok and clean
         passed += ok

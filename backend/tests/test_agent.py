@@ -186,3 +186,45 @@ def test_numbers_from_earlier_answers_are_not_evidence(small_entries):
     outcome = asyncio.run(Agent(llm, max_repairs=0).answer(
         "and again?", small_entries, summary(small_entries, NoArgs()), history))
     assert outcome.error_code == "unverified_answer"
+
+
+def tool_calls(*calls):
+    import json
+
+    return json.dumps({"type": "tool_calls", "calls": [{"tool": t, "args": a} for t, a in calls]})
+
+
+def test_several_tool_calls_in_one_reply(small_entries):
+    outcome, llm = run_agent(small_entries, [
+        tool_calls(("summary", {}), ("count_by", {"field": "service", "level": ["ERROR"]})),
+        final("3 errors; payments had 2.", [1, 2]),
+    ])
+    assert outcome.status == "answered" and outcome.llm_calls == 2
+    assert [(t["id"], t["tool"]) for t in outcome.trace] == [(1, "summary"), (2, "count_by")]
+    results_message = llm.calls[1][1][-1].content
+    assert "TOOL_RESULT id=1 tool=summary" in results_message and "TOOL_RESULT id=2 tool=count_by" in results_message
+
+
+def test_tool_calls_are_all_or_nothing(small_entries):
+    outcome, _ = run_agent(small_entries, [
+        tool_calls(("summary", {}), ("count_by", {"field": "hostname"})),
+        tool_calls(("summary", {})),
+        final("3 errors.", [1]),
+    ])
+    assert outcome.status == "answered"
+    assert outcome.trace[0]["kind"] == "rejected" and "invalid args for count_by" in outcome.trace[0]["problem"]
+    # The valid summary in the rejected batch did not run: the first executed call is id 1.
+    assert [t["id"] for t in outcome.trace if t["kind"] == "tool_call"] == [1]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"type": "tool_calls", "calls": []}',
+        '{"type": "tool_calls", "calls": [' + ", ".join(['{"tool": "summary"}'] * 5) + "]}",
+        '{"type": "tool_calls"}',
+    ],
+)
+def test_tool_calls_shape_limits(raw):
+    with pytest.raises(StepParseError):
+        parse_step(raw)

@@ -205,3 +205,8 @@ def test_change_events_without_errors(small_entries):
     r = run(entries, "change_events")
     assert r["first_error_ts"] is None and r["events"][0]["relative_to_errors"] == "no_errors"
     assert run(small_entries, "change_events")["total_matching"] == 0
+
+
+def test_change_events_ignores_level_filter():
+    r = run(parse_logs(INCIDENT).entries, "change_events", level=["ERROR"])
+    assert r["total_matching"] == 4 and "level" not in r["filters"]
