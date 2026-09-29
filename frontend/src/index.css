@@ -676,3 +676,11 @@ table.compact {
 .ask-inner .error {
   margin: 0;
 }
+
+/* Recharts measures label widths in an off-screen span it appends to <body> and leaves the
+   last label in it (e.g. a "7" axis tick), which shows up when copying the page.
+   visibility:hidden still allows measuring but keeps it out of copy/paste and screen readers. */
+#recharts_measurement_span {
+  visibility: hidden;
+  user-select: none;
+}
