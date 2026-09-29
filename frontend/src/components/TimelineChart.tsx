@@ -67,13 +67,13 @@ export function TimelineChart({ buckets, bucketMinutes }: Props) {
               formatter={(value) => <span className="legend-label">{value}</span>}
             />
             {/* Surface-colored stroke = the 2px gap between stacked segments and neighbors. */}
-            <Bar dataKey="errors" name="Errors" stackId="a" fill="var(--series-errors)" stroke="var(--surface)" strokeWidth={1} />
+            <Bar dataKey="errors" name="Errors" stackId="a" fill="var(--series-errors)" stroke="var(--chart-gap)" strokeWidth={1} />
             <Bar
               dataKey="other"
               name="Other entries"
               stackId="a"
               fill="var(--series-other)"
-              stroke="var(--surface)"
+              stroke="var(--chart-gap)"
               strokeWidth={1}
               radius={[4, 4, 0, 0]}
             />

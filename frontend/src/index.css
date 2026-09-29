@@ -1,56 +1,38 @@
+/* Liquid Glass Aurora theme: dark, translucent layers over a slow-moving aurora.
+   One dark palette on purpose (the aurora and glass only read well on dark);
+   chart colors validated for the dark surface (indigo/rose, colorblind-safe). */
 :root {
-  color-scheme: light;
-  --bg: #f5f5f3;
-  --surface: #fcfcfb;
-  --surface-2: #f0efec;
-  --border: #e2e1dc;
-  --text: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #6d6c67;
-  --grid: #e6e5e0;
-  --hover: rgba(0, 0, 0, 0.05);
-  --accent: #2a78d6;
+  color-scheme: dark;
+  --bg: #07070d;
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-solid: #13131f;
+  --border: rgba(255, 255, 255, 0.13);
+  --text: #eef0f7;
+  --text-secondary: #b4b9cc;
+  --text-muted: #8a90a6;
+  --grid: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.06);
+  --accent: #6366f1;
+  --accent-2: #ec4899;
   --accent-text: #ffffff;
-  --series-other: #2a78d6;
-  --series-errors: #e34948;
-  --ok-bg: #e8f5e8;
-  --ok-text: #0b5d0b;
-  --bad-bg: #fdecec;
-  --bad-text: #9b1c1c;
-  --warn-bg: #fff6e0;
-  --warn-text: #6b4a00;
-  --cited: #2a78d6;
-  --mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  --series-other: #6366f1;
+  --series-errors: #f43f5e;
+  --chart-gap: #0d0d17;
+  --ok-bg: rgba(16, 185, 129, 0.14);
+  --ok-text: #6ee7b7;
+  --bad-bg: rgba(244, 63, 94, 0.14);
+  --bad-text: #fda4af;
+  --warn-bg: rgba(251, 191, 36, 0.12);
+  --warn-text: #fcd34d;
+  --cited: #818cf8;
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 18px 44px rgba(0, 0, 0, 0.45);
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
   line-height: 1.5;
   background: var(--bg);
   color: var(--text);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #121211;
-    --surface: #1a1a19;
-    --surface-2: #232321;
-    --border: #33332f;
-    --text: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #9a998f;
-    --grid: #2c2c29;
-    --hover: rgba(255, 255, 255, 0.06);
-    --accent: #3987e5;
-    --series-other: #3987e5;
-    --series-errors: #e66767;
-    --ok-bg: #16301a;
-    --ok-text: #9be29b;
-    --bad-bg: #3a1d1d;
-    --bad-text: #ffb4b4;
-    --warn-bg: #3a2f14;
-    --warn-text: #f5d58a;
-    --cited: #3987e5;
-  }
 }
 
 * {
@@ -59,7 +41,8 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  /* Transparent so the aurora layer (body::before, z-index -1) shows through; the page color is on :root. */
+  background: transparent;
 }
 
 .page {
@@ -683,4 +666,198 @@ table.compact {
 #recharts_measurement_span {
   visibility: hidden;
   user-select: none;
+}
+
+
+/* ================= Liquid Glass Aurora layer ================= */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 35% at 18% 12%, rgba(99, 102, 241, 0.5), transparent 70%),
+    radial-gradient(35% 30% at 85% 22%, rgba(236, 72, 153, 0.34), transparent 70%),
+    radial-gradient(40% 40% at 60% 92%, rgba(34, 211, 238, 0.28), transparent 70%);
+  filter: blur(40px);
+  animation: aurora 20s ease-in-out infinite alternate;
+}
+
+@keyframes aurora {
+  to {
+    transform: translate3d(4%, -3%, 0) rotate(8deg) scale(1.08);
+  }
+}
+
+.page {
+  position: relative;
+}
+
+h1 {
+  background: linear-gradient(90deg, #fff, #c7d2fe 60%, #f9a8d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.logo {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #818cf8, #ec4899);
+  box-shadow: 0 8px 28px rgba(236, 72, 153, 0.45);
+  display: grid;
+  place-items: center;
+}
+
+.card,
+.answer,
+.ask-inner,
+.chart-tooltip {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025));
+  border: 1px solid var(--border);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--glass-shadow);
+}
+
+.card,
+.answer {
+  border-radius: 18px;
+}
+
+.chart-tooltip {
+  background: rgba(19, 19, 31, 0.92);
+}
+
+.tile {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  transform-style: preserve-3d;
+}
+
+.tile:hover {
+  transform: perspective(700px) rotateX(6deg) rotateY(-6deg) translateY(-3px);
+  border-color: rgba(129, 140, 248, 0.45);
+  box-shadow: 0 22px 44px rgba(99, 102, 241, 0.3);
+}
+
+.tile-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+.tile-value {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+button {
+  background: linear-gradient(135deg, #6366f1, #ec4899);
+  box-shadow: 0 8px 24px rgba(236, 72, 153, 0.35);
+  border-radius: 12px;
+  font-weight: 600;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(236, 72, 153, 0.45);
+}
+
+button.secondary,
+.chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+button.secondary:hover:not(:disabled),
+.chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+  color: var(--text);
+  box-shadow: none;
+}
+
+input,
+textarea {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+}
+
+.dropzone {
+  border-color: rgba(129, 140, 248, 0.4);
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 14px;
+}
+
+.verdict.ok {
+  border: 1px solid rgba(110, 231, 183, 0.35);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.2);
+}
+
+.verdict.failed,
+.error {
+  border: 1px solid rgba(253, 164, 175, 0.3);
+}
+
+.step {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.step.rejected {
+  background: var(--bad-bg);
+}
+
+.badge {
+  background: linear-gradient(90deg, #6366f1, #ec4899);
+}
+
+.step pre {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.ask-bar {
+  background: linear-gradient(to top, var(--bg) 55%, transparent);
+}
+
+.ask-inner {
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.answer.pending .spinner,
+.loading .spinner {
+  border-top-color: #ec4899;
+}
+
+/* Errors glow a little so the incident pops out of the chart. */
+.recharts-bar-rectangle path[fill='var(--series-errors)'] {
+  filter: drop-shadow(0 0 6px rgba(244, 63, 94, 0.7));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
+  }
+  .tile:hover,
+  button:hover:not(:disabled) {
+    transform: none;
+  }
 }

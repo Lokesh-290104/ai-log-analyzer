@@ -84,7 +84,16 @@ export default function App() {
     <div className={`page${upload ? ' with-ask-bar' : ''}`}>
       <header className="header">
         <div>
-          <h1>AI Log Analyzer</h1>
+          <div className="brand">
+            <div className="logo" aria-hidden>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <rect x="3" y="11" width="3" height="6" rx="1" fill="#fff" />
+                <rect x="8.5" y="4" width="3" height="13" rx="1" fill="#fff" />
+                <rect x="14" y="8" width="3" height="9" rx="1" fill="#fde2f0" />
+              </svg>
+            </div>
+            <h1>AI Log Analyzer</h1>
+          </div>
           <p className="tagline">
             Ask questions about your logs. <strong>The LLM is the witness, code is the judge:</strong> the model picks
             tools and explains, Python computes every number, and answers with unverifiable numbers are rejected.

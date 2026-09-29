@@ -11,5 +11,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    // First (cold) runs compile everything; user-event typing tests can exceed the 5 s default.
+    testTimeout: 15000,
   },
 })
